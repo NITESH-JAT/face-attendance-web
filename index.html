@@ -2,154 +2,163 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Face Attendance System</title>
-  <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
-  <script async src="https://docs.opencv.org/master/opencv.js" type="text/javascript"></script>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 font-sans">
-  <div class="container mx-auto py-10 px-5">
-    <h1 class="text-3xl font-bold text-center text-blue-600 mb-10">Face Recognition Attendance</h1>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
-      <!-- Register -->
-      <div class="bg-white p-6 rounded-xl shadow-md">
-        <h2 class="text-xl font-semibold mb-4">📋 Register</h2>
-        <input type="text" id="reg_name" placeholder="Name" class="w-full mb-3 p-2 border rounded-md" />
-        <input type="text" id="reg_roll" placeholder="Roll No" class="w-full mb-3 p-2 border rounded-md" />
-        <input type="file" id="reg_images" multiple accept="image/*" class="w-full mb-3 p-2 border rounded-md" />
-        <button onclick="registerStudent()" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">Register</button>
-        <p id="register_msg" class="mt-3 text-green-600"></p>
-      </div>
+<body class="bg-gray-100 text-gray-800">
 
-      <!-- Attendance -->
-      <div class="bg-white p-6 rounded-xl shadow-md">
-        <h2 class="text-xl font-semibold mb-4">📷 Take Attendance</h2>
-        <input type="text" id="subject_input" placeholder="Subject" class="w-full mb-3 p-2 border rounded-md" />
-        <button onclick="startAttendance()" class="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700">Start Attendance</button>
-        <video id="video" autoplay class="mt-4 w-full h-60 object-cover rounded-md border"></video>
-        <p id="attendance_msg" class="mt-3 text-blue-600"></p>
-      </div>
+<div class="container mx-auto px-4 py-8">
+  <div class="grid md:grid-cols-2 gap-6">
+    <!-- Register Section -->
+    <div class="bg-white p-6 rounded-2xl shadow-lg">
+      <h2 class="text-xl font-semibold text-blue-600 mb-4">📋 Register</h2>
+      <input id="name" type="text" placeholder="Name" class="w-full mb-2 p-2 border rounded-lg" />
+      <input id="roll" type="text" placeholder="Roll Number" class="w-full mb-2 p-2 border rounded-lg" />
+      <input id="images" type="file" multiple accept="image/*" class="w-full mb-4" />
+      <button id="registerBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">Register</button>
+      <p id="registerStatus" class="mt-2 text-sm text-green-600"></p>
     </div>
 
-    <!-- Attendance Table -->
-    <div class="mt-10 bg-white p-6 rounded-xl shadow-md">
-      <h2 class="text-xl font-semibold mb-4">📝 Attendance Log</h2>
-      <table class="table-auto w-full">
-        <thead>
-          <tr class="bg-blue-100">
-            <th class="px-4 py-2">Name</th>
-            <th class="px-4 py-2">Roll</th>
-            <th class="px-4 py-2">Subject</th>
-            <th class="px-4 py-2">Time</th>
-          </tr>
-        </thead>
-        <tbody id="attendance_table"></tbody>
-      </table>
+    <!-- Attendance Section -->
+    <div class="bg-white p-6 rounded-2xl shadow-lg">
+      <h2 class="text-xl font-semibold text-blue-600 mb-4">📷 Take Attendance</h2>
+      <input id="subject" type="text" placeholder="Subject" class="w-full mb-2 p-2 border rounded-lg" />
+      <button id="startBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">Take Attendance</button>
+      <div class="mt-4">
+        <video id="video" width="320" height="240" autoplay muted class="border rounded-lg"></video>
+      </div>
     </div>
   </div>
 
-  <script>
-    let registeredFaces = []
+  <!-- Attendance Table -->
+  <div class="bg-white p-6 mt-6 rounded-2xl shadow-lg">
+    <h2 class="text-xl font-semibold text-blue-600 mb-4">📑 Attendance Log</h2>
+    <table class="min-w-full text-sm text-left border">
+      <thead>
+        <tr class="bg-blue-100">
+          <th class="px-4 py-2">Name</th>
+          <th class="px-4 py-2">Roll</th>
+          <th class="px-4 py-2">Subject</th>
+          <th class="px-4 py-2">Time</th>
+        </tr>
+      </thead>
+      <tbody id="attendanceTable"></tbody>
+    </table>
+    <button id="downloadCSV" class="mt-4 bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-900">⬇️ Download CSV</button>
+  </div>
+</div>
 
-    function registerStudent() {
-      const name = document.getElementById("reg_name").value.trim()
-      const roll = document.getElementById("reg_roll").value.trim()
-      const files = document.getElementById("reg_images").files
-      const msg = document.getElementById("register_msg")
-      if (!name || !roll || files.length !== 10) {
-        msg.textContent = "⚠️ Enter name, roll and upload 10 images."
-        return
-      }
+<script>
+  const registerBtn = document.getElementById('registerBtn');
+  const nameInput = document.getElementById('name');
+  const rollInput = document.getElementById('roll');
+  const imageInput = document.getElementById('images');
+  const registerStatus = document.getElementById('registerStatus');
+  const attendanceTable = document.getElementById('attendanceTable');
+  const startBtn = document.getElementById('startBtn');
+  const subjectInput = document.getElementById('subject');
+  const video = document.getElementById('video');
+  const downloadCSV = document.getElementById('downloadCSV');
 
-      const reader = new FileReader()
-      let loaded = 0
-      for (let i = 0; i < files.length; i++) {
-        reader.onload = function (e) {
-          const img = new Image()
-          img.onload = function () {
-            const canvas = document.createElement("canvas")
-            canvas.width = 100
-            canvas.height = 100
-            const ctx = canvas.getContext("2d")
-            ctx.drawImage(img, 0, 0, 100, 100)
-            const imageData = ctx.getImageData(0, 0, 100, 100)
-            const flatData = Array.from(imageData.data).map(x => x / 255)
-            registeredFaces.push({ name, roll, features: flatData })
-            loaded++
-            if (loaded === 10) msg.textContent = `✅ Registered ${name} (${roll})`
+  let students = JSON.parse(localStorage.getItem('students') || '[]');
+  let attendanceLog = JSON.parse(localStorage.getItem('attendance') || '[]');
+
+  function updateAttendanceTable() {
+    attendanceTable.innerHTML = '';
+    attendanceLog.slice(-10).forEach(entry => {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td class="px-4 py-2">${entry.name}</td>
+                       <td class="px-4 py-2">${entry.roll}</td>
+                       <td class="px-4 py-2">${entry.subject}</td>
+                       <td class="px-4 py-2">${entry.time}</td>`;
+      attendanceTable.appendChild(row);
+    });
+  }
+
+  registerBtn.onclick = () => {
+    const name = nameInput.value.trim();
+    const roll = rollInput.value.trim();
+    const files = imageInput.files;
+
+    if (!name || !roll || files.length !== 10) {
+      registerStatus.textContent = "⚠️ Please fill all fields and upload exactly 10 images.";
+      return;
+    }
+
+    const student = { name, roll, images: [] };
+
+    const readerPromises = Array.from(files).map(file => {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readerPromises).then(results => {
+      student.images = results;
+      students.push(student);
+      localStorage.setItem('students', JSON.stringify(students));
+      registerStatus.textContent = `✅ ${name} registered successfully!`;
+      nameInput.value = '';
+      rollInput.value = '';
+      imageInput.value = '';
+    });
+  };
+
+  startBtn.onclick = async () => {
+    const subject = subjectInput.value.trim();
+    if (!subject) {
+      alert("Enter subject!");
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    setTimeout(async () => {
+      ctx.drawImage(video, 0, 0, 320, 240);
+      const imageData = canvas.toDataURL();
+
+      let matchFound = false;
+
+      for (let student of students) {
+        for (let img of student.images) {
+          if (img.slice(0, 50) === imageData.slice(0, 50)) { // Simulated match
+            const timeNow = new Date().toLocaleString();
+            attendanceLog.push({ name: student.name, roll: student.roll, subject, time: timeNow });
+            localStorage.setItem('attendance', JSON.stringify(attendanceLog));
+            updateAttendanceTable();
+            alert(`✅ Attendance marked for ${student.name}`);
+            matchFound = true;
+            break;
           }
-          img.src = e.target.result
         }
-        reader.readAsDataURL(files[i])
+        if (matchFound) break;
       }
-    }
 
-    function startAttendance() {
-      const subject = document.getElementById("subject_input").value.trim()
-      const msg = document.getElementById("attendance_msg")
-      const video = document.getElementById("video")
-      if (!subject) {
-        msg.textContent = "⚠️ Enter subject."
-        return
+      if (!matchFound) {
+        alert("❌ Face not recognized. Please register first.");
       }
-      if (!navigator.mediaDevices) {
-        msg.textContent = "⚠️ Webcam not supported."
-        return
-      }
-      msg.textContent = "🔍 Recognizing... Press stop to end."
-      navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
-        video.srcObject = stream
-        const canvas = document.createElement("canvas")
-        const ctx = canvas.getContext("2d")
-        const marked = new Set()
 
-        const interval = setInterval(() => {
-          canvas.width = video.videoWidth
-          canvas.height = video.videoHeight
-          ctx.drawImage(video, 0, 0)
-          const faceImgData = ctx.getImageData(0, 0, 100, 100) // mock small
-          const currentData = Array.from(faceImgData.data).map(x => x / 255)
+      stream.getTracks().forEach(t => t.stop());
+    }, 2000);
+  };
 
-          let bestMatch = null
-          let bestDist = Infinity
+  downloadCSV.onclick = () => {
+    const csv = Papa.unparse(attendanceLog);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, 'attendance.csv');
+  };
 
-          for (const person of registeredFaces) {
-            const dist = euclideanDistance(currentData, person.features)
-            if (dist < bestDist) {
-              bestDist = dist
-              bestMatch = person
-            }
-          }
-
-          if (bestDist < 0.5 && bestMatch && !marked.has(bestMatch.roll)) {
-            const row = document.createElement("tr")
-            row.innerHTML = `
-              <td class='border px-4 py-2'>${bestMatch.name}</td>
-              <td class='border px-4 py-2'>${bestMatch.roll}</td>
-              <td class='border px-4 py-2'>${subject}</td>
-              <td class='border px-4 py-2'>${new Date().toLocaleString()}</td>`
-            document.getElementById("attendance_table").appendChild(row)
-            marked.add(bestMatch.roll)
-            msg.textContent = `✅ Marked ${bestMatch.name} (${bestMatch.roll})`
-          } else if (bestDist >= 0.5) {
-            msg.textContent = "⚠️ Face not recognized. Please register first."
-          }
-        }, 2000)
-
-        setTimeout(() => {
-          clearInterval(interval)
-          stream.getTracks().forEach(track => track.stop())
-          msg.textContent = "✔️ Attendance ended."
-        }, 20000) // runs for 20 seconds
-      })
-    }
-
-    function euclideanDistance(a, b) {
-      let sum = 0
-      for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2
-      return Math.sqrt(sum)
-    }
-  </script>
+  updateAttendanceTable();
+</script>
 </body>
 </html>
