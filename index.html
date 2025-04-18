@@ -3,162 +3,240 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Face Attendance System</title>
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Face Recognition Attendance</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f7fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h2 {
+      color: #007bff;
+    }
+    .container {
+      display: flex;
+      gap: 30px;
+      margin: 30px;
+      width: 90%;
+      max-width: 1200px;
+      justify-content: space-between;
+    }
+    .card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      width: 100%;
+    }
+    input, button, select {
+      padding: 10px;
+      margin: 8px 0;
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #007bff;
+      color: white;
+    }
+    video {
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 8px;
+    }
+  </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
-
-<div class="container mx-auto px-4 py-8">
-  <div class="grid md:grid-cols-2 gap-6">
-    <!-- Register Section -->
-    <div class="bg-white p-6 rounded-2xl shadow-lg">
-      <h2 class="text-xl font-semibold text-blue-600 mb-4">📋 Register</h2>
-      <input id="name" type="text" placeholder="Name" class="w-full mb-2 p-2 border rounded-lg" />
-      <input id="roll" type="text" placeholder="Roll Number" class="w-full mb-2 p-2 border rounded-lg" />
-      <input id="images" type="file" multiple accept="image/*" class="w-full mb-4" />
-      <button id="registerBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">Register</button>
-      <p id="registerStatus" class="mt-2 text-sm text-green-600"></p>
+<body>
+  <h2>Face Recognition Attendance System</h2>
+  <div class="container">
+    <!-- Registration -->
+    <div class="card">
+      <h3>📋 Register</h3>
+      <input type="text" id="name" placeholder="Enter Name" />
+      <input type="text" id="roll" placeholder="Enter Roll Number" />
+      <input type="file" id="images" accept="image/*" multiple />
+      <button onclick="registerStudent()">Register</button>
     </div>
 
-    <!-- Attendance Section -->
-    <div class="bg-white p-6 rounded-2xl shadow-lg">
-      <h2 class="text-xl font-semibold text-blue-600 mb-4">📷 Take Attendance</h2>
-      <input id="subject" type="text" placeholder="Subject" class="w-full mb-2 p-2 border rounded-lg" />
-      <button id="startBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">Take Attendance</button>
-      <div class="mt-4">
-        <video id="video" width="320" height="240" autoplay muted class="border rounded-lg"></video>
-      </div>
+    <!-- Attendance -->
+    <div class="card">
+      <h3>📷 Take Attendance</h3>
+      <input type="text" id="subject" placeholder="Enter Subject" />
+      <button onclick="startAttendance()">Take Attendance</button>
+      <video id="video" autoplay></video>
     </div>
   </div>
 
-  <!-- Attendance Table -->
-  <div class="bg-white p-6 mt-6 rounded-2xl shadow-lg">
-    <h2 class="text-xl font-semibold text-blue-600 mb-4">📑 Attendance Log</h2>
-    <table class="min-w-full text-sm text-left border">
+  <!-- Attendance Log -->
+  <div class="card" style="width: 90%; max-width: 1200px; margin-bottom: 40px;">
+    <h3>📑 Attendance Log</h3>
+    <table id="logTable">
       <thead>
-        <tr class="bg-blue-100">
-          <th class="px-4 py-2">Name</th>
-          <th class="px-4 py-2">Roll</th>
-          <th class="px-4 py-2">Subject</th>
-          <th class="px-4 py-2">Time</th>
+        <tr>
+          <th>Name</th>
+          <th>Roll</th>
+          <th>Subject</th>
+          <th>Time</th>
         </tr>
       </thead>
-      <tbody id="attendanceTable"></tbody>
+      <tbody></tbody>
     </table>
-    <button id="downloadCSV" class="mt-4 bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-900">⬇️ Download CSV</button>
+    <button onclick="downloadCSV()">⬇️ Download CSV</button>
   </div>
-</div>
 
-<script>
-  const registerBtn = document.getElementById('registerBtn');
-  const nameInput = document.getElementById('name');
-  const rollInput = document.getElementById('roll');
-  const imageInput = document.getElementById('images');
-  const registerStatus = document.getElementById('registerStatus');
-  const attendanceTable = document.getElementById('attendanceTable');
-  const startBtn = document.getElementById('startBtn');
-  const subjectInput = document.getElementById('subject');
-  const video = document.getElementById('video');
-  const downloadCSV = document.getElementById('downloadCSV');
+  <script>
+    function registerStudent() {
+      const name = document.getElementById("name").value.trim();
+      const roll = document.getElementById("roll").value.trim();
+      const imagesInput = document.getElementById("images");
 
-  let students = JSON.parse(localStorage.getItem('students') || '[]');
-  let attendanceLog = JSON.parse(localStorage.getItem('attendance') || '[]');
+      if (!name || !roll || imagesInput.files.length !== 10) {
+        alert("Please fill all fields and upload exactly 10 images.");
+        return;
+      }
 
-  function updateAttendanceTable() {
-    attendanceTable.innerHTML = '';
-    attendanceLog.slice(-10).forEach(entry => {
-      const row = document.createElement('tr');
-      row.innerHTML = `<td class="px-4 py-2">${entry.name}</td>
-                       <td class="px-4 py-2">${entry.roll}</td>
-                       <td class="px-4 py-2">${entry.subject}</td>
-                       <td class="px-4 py-2">${entry.time}</td>`;
-      attendanceTable.appendChild(row);
-    });
-  }
-
-  registerBtn.onclick = () => {
-    const name = nameInput.value.trim();
-    const roll = rollInput.value.trim();
-    const files = imageInput.files;
-
-    if (!name || !roll || files.length !== 10) {
-      registerStatus.textContent = "⚠️ Please fill all fields and upload exactly 10 images.";
-      return;
-    }
-
-    const student = { name, roll, images: [] };
-
-    const readerPromises = Array.from(files).map(file => {
-      return new Promise(resolve => {
+      const readerPromises = [];
+      for (let file of imagesInput.files) {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
+        const promise = new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result);
+        });
         reader.readAsDataURL(file);
+        readerPromises.push(promise);
+      }
+
+      Promise.all(readerPromises).then((images) => {
+        const student = { name, roll, images };
+        let students = JSON.parse(localStorage.getItem("students") || "[]");
+
+        if (students.some(s => s.roll === roll)) {
+          alert("⚠️ Roll number already registered.");
+          return;
+        }
+
+        students.push(student);
+        localStorage.setItem("students", JSON.stringify(students));
+        alert(`✅ Registered ${name} (${roll}) successfully!`);
+        document.getElementById("name").value = "";
+        document.getElementById("roll").value = "";
+        imagesInput.value = "";
       });
-    });
-
-    Promise.all(readerPromises).then(results => {
-      student.images = results;
-      students.push(student);
-      localStorage.setItem('students', JSON.stringify(students));
-      registerStatus.textContent = `✅ ${name} registered successfully!`;
-      nameInput.value = '';
-      rollInput.value = '';
-      imageInput.value = '';
-    });
-  };
-
-  startBtn.onclick = async () => {
-    const subject = subjectInput.value.trim();
-    if (!subject) {
-      alert("Enter subject!");
-      return;
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
+    async function startAttendance() {
+      const subject = document.getElementById("subject").value.trim();
+      if (!subject) {
+        alert("Please enter the subject.");
+        return;
+      }
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+      const students = JSON.parse(localStorage.getItem("students") || "[]");
+      if (!students.length) {
+        alert("No registered students.");
+        return;
+      }
 
-    setTimeout(async () => {
-      ctx.drawImage(video, 0, 0, 320, 240);
-      const imageData = canvas.toDataURL();
+      const video = document.getElementById("video");
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
 
-      let matchFound = false;
+      const canvas = document.createElement("canvas");
 
-      for (let student of students) {
-        for (let img of student.images) {
-          if (img.slice(0, 50) === imageData.slice(0, 50)) { // Simulated match
-            const timeNow = new Date().toLocaleString();
-            attendanceLog.push({ name: student.name, roll: student.roll, subject, time: timeNow });
-            localStorage.setItem('attendance', JSON.stringify(attendanceLog));
-            updateAttendanceTable();
-            alert(`✅ Attendance marked for ${student.name}`);
-            matchFound = true;
-            break;
+      const interval = setInterval(() => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0);
+        const capturedImage = canvas.toDataURL("image/jpeg");
+
+        let found = false;
+        for (const student of students) {
+          for (const image of student.images) {
+            if (similarity(image, capturedImage) > 0.90) {
+              markAttendance(student.name, student.roll, subject);
+              found = true;
+              break;
+            }
           }
+          if (found) break;
         }
-        if (matchFound) break;
-      }
 
-      if (!matchFound) {
-        alert("❌ Face not recognized. Please register first.");
-      }
+        if (!found) {
+          console.log("⚠️ Face not recognized. Please register first.");
+        }
 
-      stream.getTracks().forEach(t => t.stop());
-    }, 2000);
-  };
+      }, 5000);
 
-  downloadCSV.onclick = () => {
-    const csv = Papa.unparse(attendanceLog);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    saveAs(blob, 'attendance.csv');
-  };
+      setTimeout(() => {
+        clearInterval(interval);
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }, 15000);
+    }
 
-  updateAttendanceTable();
-</script>
+    function similarity(img1, img2) {
+      // Basic pixel diff (not ideal for real matching but placeholder)
+      return img1.slice(0, 100) === img2.slice(0, 100) ? 1 : 0;
+    }
+
+    function markAttendance(name, roll, subject) {
+      const time = new Date().toLocaleString();
+      const log = JSON.parse(localStorage.getItem("attendance") || "[]");
+      if (log.some(entry => entry.roll === roll && entry.subject === subject)) return;
+      log.push({ name, roll, subject, time });
+      localStorage.setItem("attendance", JSON.stringify(log));
+      renderLog();
+    }
+
+    function renderLog() {
+      const log = JSON.parse(localStorage.getItem("attendance") || "[]");
+      const tbody = document.querySelector("#logTable tbody");
+      tbody.innerHTML = "";
+      log.slice().reverse().forEach(entry => {
+        const row = `<tr><td>${entry.name}</td><td>${entry.roll}</td><td>${entry.subject}</td><td>${entry.time}</td></tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    function downloadCSV() {
+      const log = JSON.parse(localStorage.getItem("attendance") || "[]");
+      const csv = ["Name,Roll,Subject,Time", ...log.map(e =>
+        `${e.name},${e.roll},${e.subject},${e.time}`
+      )].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "attendance.csv";
+      a.click();
+    }
+
+    // Load attendance table on startup
+    window.onload = renderLog;
+  </script>
 </body>
 </html>
