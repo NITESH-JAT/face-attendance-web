@@ -68,23 +68,6 @@
       margin-top: 10px;
       border-radius: 8px;
     }
-    .status {
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 6px;
-      text-align: center;
-      display: none;
-    }
-    .success {
-      background-color: #d4edda;
-      color: #155724;
-      display: block;
-    }
-    .error {
-      background-color: #f8d7da;
-      color: #721c24;
-      display: block;
-    }
   </style>
 </head>
 <body>
@@ -96,8 +79,7 @@
       <input type="text" id="name" placeholder="Enter Name" />
       <input type="text" id="roll" placeholder="Enter Roll Number" />
       <input type="file" id="images" accept="image/*" multiple />
-      <button id="registerBtn" onclick="registerStudent()">Register</button>
-      <div id="registerStatus" class="status"></div>
+      <button onclick="registerStudent()">Register</button>
     </div>
 
     <!-- Attendance -->
@@ -106,7 +88,6 @@
       <input type="text" id="subject" placeholder="Enter Subject" />
       <button onclick="startAttendance()">Take Attendance</button>
       <video id="video" autoplay></video>
-      <div id="attendanceStatus" class="status"></div>
     </div>
   </div>
 
@@ -128,320 +109,134 @@
   </div>
 
   <script>
-    // Helper function to show status messages
-    function showStatus(elementId, message, isError = false) {
-      const statusElement = document.getElementById(elementId);
-      statusElement.textContent = message;
-      statusElement.className = `status ${isError ? 'error' : 'success'}`;
-      
-      // Auto-hide after 3 seconds
-      setTimeout(() => {
-        statusElement.className = 'status';
-      }, 3000);
-    }
-
     function registerStudent() {
       const name = document.getElementById("name").value.trim();
       const roll = document.getElementById("roll").value.trim();
       const imagesInput = document.getElementById("images");
-      const registerBtn = document.getElementById("registerBtn");
 
-      // Validation
-      if (!name) {
-        showStatus("registerStatus", "⚠️ Please enter a name", true);
+      if (!name || !roll || imagesInput.files.length !== 10) {
+        alert("Please fill all fields and upload exactly 10 images.");
         return;
       }
-      
-      if (!roll) {
-        showStatus("registerStatus", "⚠️ Please enter a roll number", true);
-        return;
-      }
-      
-      if (imagesInput.files.length === 0) {
-        showStatus("registerStatus", "⚠️ Please select images", true);
-        return;
-      }
-
-      // Disable button while processing
-      registerBtn.disabled = true;
-      registerBtn.textContent = "Processing...";
-      showStatus("registerStatus", "Processing images...");
 
       const readerPromises = [];
-      
-      for (let i = 0; i < imagesInput.files.length; i++) {
-        const file = imagesInput.files[i];
-        readerPromises.push(new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          
-          reader.onload = function(e) {
-            resolve(e.target.result);
-          };
-          
-          reader.onerror = function() {
-            reject(new Error(`Failed to read file: ${file.name}`));
-          };
-          
-          reader.readAsDataURL(file);
-        }));
+      for (let file of imagesInput.files) {
+        const reader = new FileReader();
+        const promise = new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result);
+        });
+        reader.readAsDataURL(file);
+        readerPromises.push(promise);
       }
 
-      Promise.all(readerPromises)
-        .then((images) => {
-          // Get existing students or initialize empty array
-          let students = [];
-          try {
-            const storedStudents = localStorage.getItem("students");
-            if (storedStudents) {
-              students = JSON.parse(storedStudents);
-            }
-          } catch (e) {
-            console.error("Error parsing stored students:", e);
-            localStorage.removeItem("students"); // Reset corrupted data
-          }
+      Promise.all(readerPromises).then((images) => {
+        const student = { name, roll, images };
+        let students = JSON.parse(localStorage.getItem("students") || "[]");
 
-          // Check for duplicate roll number
-          if (students.some(s => s.roll === roll)) {
-            showStatus("registerStatus", "⚠️ Roll number already registered", true);
-            return;
-          }
+        if (students.some(s => s.roll === roll)) {
+          alert("⚠️ Roll number already registered.");
+          return;
+        }
 
-          // Add new student
-          const student = { name, roll, images };
-          students.push(student);
-          
-          // Save to localStorage
-          try {
-            localStorage.setItem("students", JSON.stringify(students));
-            showStatus("registerStatus", `✅ Successfully registered ${name} (${roll})`);
-            
-            // Clear form
-            document.getElementById("name").value = "";
-            document.getElementById("roll").value = "";
-            imagesInput.value = "";
-            
-            console.log(`Stored ${students.length} students in localStorage`);
-          } catch (e) {
-            console.error("Error saving to localStorage:", e);
-            showStatus("registerStatus", "❌ Failed to save data. Storage might be full.", true);
-          }
-        })
-        .catch(error => {
-          console.error("Error processing images:", error);
-          showStatus("registerStatus", "❌ Error processing images", true);
-        })
-        .finally(() => {
-          // Re-enable button
-          registerBtn.disabled = false;
-          registerBtn.textContent = "Register";
-        });
+        students.push(student);
+        localStorage.setItem("students", JSON.stringify(students));
+        alert(`✅ Registered ${name} (${roll}) successfully!`);
+        document.getElementById("name").value = "";
+        document.getElementById("roll").value = "";
+        imagesInput.value = "";
+      });
     }
 
     async function startAttendance() {
       const subject = document.getElementById("subject").value.trim();
       if (!subject) {
-        showStatus("attendanceStatus", "⚠️ Please enter the subject", true);
+        alert("Please enter the subject.");
         return;
       }
 
-      // Load students
-      let students = [];
-      try {
-        const storedStudents = localStorage.getItem("students");
-        if (storedStudents) {
-          students = JSON.parse(storedStudents);
-        }
-      } catch (e) {
-        console.error("Error loading students:", e);
-        showStatus("attendanceStatus", "❌ Error loading student data", true);
-        return;
-      }
-
+      const students = JSON.parse(localStorage.getItem("students") || "[]");
       if (!students.length) {
-        showStatus("attendanceStatus", "⚠️ No registered students", true);
+        alert("No registered students.");
         return;
       }
 
-      showStatus("attendanceStatus", "📸 Camera starting...");
+      const video = document.getElementById("video");
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
 
-      try {
-        const video = document.getElementById("video");
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
+      const canvas = document.createElement("canvas");
 
-        const canvas = document.createElement("canvas");
-        let recognizedStudents = new Set();
-        
-        showStatus("attendanceStatus", "🔍 Looking for faces...");
+      const interval = setInterval(() => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0);
+        const capturedImage = canvas.toDataURL("image/jpeg");
 
-        const interval = setInterval(() => {
-          // Only process if video dimensions are available
-          if (video.videoWidth > 0 && video.videoHeight > 0) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(video, 0, 0);
-            const capturedImage = canvas.toDataURL("image/jpeg");
-
-            // Attempt recognition
-            let found = false;
-            for (const student of students) {
-              // Skip already recognized students
-              if (recognizedStudents.has(student.roll)) continue;
-              
-              // Check against all registered images
-              for (const image of student.images) {
-                if (compareImages(image, capturedImage) > 0.6) { // Lowered threshold
-                  markAttendance(student.name, student.roll, subject);
-                  recognizedStudents.add(student.roll);
-                  showStatus("attendanceStatus", `✅ Recognized: ${student.name}`);
-                  found = true;
-                  break;
-                }
-              }
-              if (found) break;
+        let found = false;
+        for (const student of students) {
+          for (const image of student.images) {
+            if (similarity(image, capturedImage) > 0.90) {
+              markAttendance(student.name, student.roll, subject);
+              found = true;
+              break;
             }
           }
-        }, 2000);
+          if (found) break;
+        }
 
-        // Stop after 15 seconds
-        setTimeout(() => {
-          clearInterval(interval);
-          stream.getTracks().forEach(track => track.stop());
-          video.srcObject = null;
-          showStatus("attendanceStatus", `✅ Attendance complete. Recognized ${recognizedStudents.size} students.`);
-        }, 15000);
-      } catch (error) {
-        console.error("Camera error:", error);
-        showStatus("attendanceStatus", "❌ Camera access error", true);
-      }
+        if (!found) {
+          console.log("⚠️ Face not recognized. Please register first.");
+        }
+
+      }, 5000);
+
+      setTimeout(() => {
+        clearInterval(interval);
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }, 15000);
     }
 
-    // A basic image comparison function (not ideal for real face recognition)
-    function compareImages(img1, img2) {
-      // In a real app, you'd use a proper face recognition library
-      // This is just a placeholder that compares data URL lengths and some patterns
-      if (!img1 || !img2) return 0;
-      
-      // Basic length comparison - not accurate but better than the original approach
-      const lengthDiff = Math.abs(img1.length - img2.length) / Math.max(img1.length, img2.length);
-      return 1 - lengthDiff; // Higher score means more similar
+    function similarity(img1, img2) {
+      // Basic pixel diff (not ideal for real matching but placeholder)
+      return img1.slice(0, 100) === img2.slice(0, 100) ? 1 : 0;
     }
 
     function markAttendance(name, roll, subject) {
       const time = new Date().toLocaleString();
-      
-      // Get existing attendance or initialize
-      let log = [];
-      try {
-        const storedLog = localStorage.getItem("attendance");
-        if (storedLog) {
-          log = JSON.parse(storedLog);
-        }
-      } catch (e) {
-        console.error("Error parsing attendance log:", e);
-      }
-      
-      // Check for duplicate attendance (same roll and subject on the same day)
-      const today = new Date().toLocaleDateString();
-      if (log.some(entry => 
-        entry.roll === roll && 
-        entry.subject === subject && 
-        new Date(entry.time).toLocaleDateString() === today
-      )) {
-        return; // Already marked attendance today
-      }
-      
-      // Add new attendance record
+      const log = JSON.parse(localStorage.getItem("attendance") || "[]");
+      if (log.some(entry => entry.roll === roll && entry.subject === subject)) return;
       log.push({ name, roll, subject, time });
-      
-      // Save to localStorage
-      try {
-        localStorage.setItem("attendance", JSON.stringify(log));
-        renderLog();
-      } catch (e) {
-        console.error("Error saving attendance:", e);
-      }
+      localStorage.setItem("attendance", JSON.stringify(log));
+      renderLog();
     }
 
     function renderLog() {
-      let log = [];
-      try {
-        const storedLog = localStorage.getItem("attendance");
-        if (storedLog) {
-          log = JSON.parse(storedLog);
-        }
-      } catch (e) {
-        console.error("Error loading attendance log:", e);
-      }
-      
+      const log = JSON.parse(localStorage.getItem("attendance") || "[]");
       const tbody = document.querySelector("#logTable tbody");
       tbody.innerHTML = "";
-      
-      // Show most recent entries first
       log.slice().reverse().forEach(entry => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${entry.name}</td>
-          <td>${entry.roll}</td>
-          <td>${entry.subject}</td>
-          <td>${entry.time}</td>
-        `;
-        tbody.appendChild(row);
+        const row = `<tr><td>${entry.name}</td><td>${entry.roll}</td><td>${entry.subject}</td><td>${entry.time}</td></tr>`;
+        tbody.innerHTML += row;
       });
     }
 
     function downloadCSV() {
-      let log = [];
-      try {
-        const storedLog = localStorage.getItem("attendance");
-        if (storedLog) {
-          log = JSON.parse(storedLog);
-        }
-      } catch (e) {
-        console.error("Error loading attendance for CSV:", e);
-        showStatus("registerStatus", "❌ Error preparing CSV data", true);
-        return;
-      }
-      
-      if (log.length === 0) {
-        showStatus("registerStatus", "⚠️ No attendance records to download", true);
-        return;
-      }
-      
-      const csv = [
-        "Name,Roll,Subject,Time", 
-        ...log.map(e => `"${e.name}","${e.roll}","${e.subject}","${e.time}"`)
-      ].join("\n");
-      
+      const log = JSON.parse(localStorage.getItem("attendance") || "[]");
+      const csv = ["Name,Roll,Subject,Time", ...log.map(e =>
+        `${e.name},${e.roll},${e.subject},${e.time}`
+      )].join("\n");
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "attendance_" + new Date().toISOString().slice(0,10) + ".csv";
+      a.download = "attendance.csv";
       a.click();
-      URL.revokeObjectURL(url);
     }
 
-    // Test localStorage is working
-    function testLocalStorage() {
-      try {
-        localStorage.setItem("test", "test");
-        localStorage.removeItem("test");
-        return true;
-      } catch (e) {
-        console.error("localStorage not available:", e);
-        return false;
-      }
-    }
-
-    // Load attendance table on startup and check storage
-    window.onload = function() {
-      if (!testLocalStorage()) {
-        alert("⚠️ Local storage is not available. This app requires local storage to function properly.");
-      }
-      renderLog();
-    };
+    // Load attendance table on startup
+    window.onload = renderLog;
   </script>
 </body>
 </html>
