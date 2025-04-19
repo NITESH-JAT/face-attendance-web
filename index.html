@@ -8,194 +8,219 @@
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      background: #f4f7fa;
       margin: 0;
       padding: 0;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 30px;
+    }
+    .container {
+      display: flex;
+      gap: 40px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    }
+    .section {
+      flex: 1;
     }
     h2 {
       color: #007bff;
     }
-    .container {
-      display: flex;
-      margin-top: 20px;
-      gap: 40px;
-    }
-    .panel {
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      width: 300px;
-    }
-    input, button, select {
+    input, select, button, textarea {
       width: 100%;
       padding: 10px;
-      margin-top: 10px;
-      border-radius: 6px;
+      margin-top: 8px;
+      margin-bottom: 15px;
       border: 1px solid #ccc;
+      border-radius: 6px;
     }
     button {
-      background: #007bff;
+      background-color: #007bff;
       color: white;
-      border: none;
       font-weight: bold;
       cursor: pointer;
     }
     button:hover {
-      background: #0056b3;
+      background-color: #0056b3;
     }
-    video {
-      border-radius: 10px;
-      margin-top: 20px;
-    }
-    table {
-      width: 80%;
-      margin-top: 30px;
+    #log-table {
+      width: 100%;
       border-collapse: collapse;
+      margin-top: 15px;
     }
-    th, td {
+    #log-table th, #log-table td {
       border: 1px solid #ccc;
-      padding: 10px;
+      padding: 8px;
       text-align: center;
     }
-    #downloadBtn {
-      margin-top: 10px;
+    #log-table th {
+      background: #007bff;
+      color: white;
+    }
+    canvas, video {
+      display: block;
+      margin: 10px auto;
     }
   </style>
 </head>
 <body>
-  <h2>📋 Face Recognition Attendance System</h2>
   <div class="container">
-    <div class="panel">
-      <h3>Register</h3>
-      <input type="text" id="name" placeholder="Name">
-      <input type="text" id="roll" placeholder="Roll Number">
-      <input type="file" id="images" multiple accept="image/*">
+    <div class="section">
+      <h2>Register Student</h2>
+      <input type="text" id="reg-name" placeholder="Full Name" />
+      <input type="text" id="reg-roll" placeholder="Roll Number" />
+      <input type="file" id="reg-images" accept="image/*" multiple />
       <button onclick="registerStudent()">Register</button>
-      <p id="registerStatus"></p>
+      <p id="reg-msg"></p>
     </div>
-    <div class="panel">
-      <h3>Take Attendance</h3>
-      <input type="text" id="subject" placeholder="Subject">
+
+    <div class="section">
+      <h2>Take Attendance</h2>
+      <input type="text" id="subject" placeholder="Subject" />
       <button onclick="startAttendance()">Take Attendance</button>
-      <video id="video" width="300" height="225" autoplay muted></video>
+      <video id="video" width="320" height="240" autoplay muted></video>
+      <canvas id="overlay" width="320" height="240"></canvas>
+      <h3>Attendance Log</h3>
+      <table id="log-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Roll</th>
+            <th>Subject</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="log-body"></tbody>
+      </table>
+      <button onclick="downloadCSV()">Download CSV</button>
     </div>
   </div>
-  <table id="logTable">
-    <thead>
-      <tr><th>Name</th><th>Roll</th><th>Subject</th><th>Time</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <button id="downloadBtn" onclick="downloadCSV()">Download CSV</button>
 
   <script>
-    let labeledDescriptors = [];
+    const labeledDescriptors = []
+    let faceMatcher;
 
-    async function loadModels() {
-      await faceapi.nets.faceRecognitionNet.loadFromUri('models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('models');
-      await faceapi.nets.ssdMobilenetv1.loadFromUri('models');
-    }
+    function registerStudent() {
+      const name = document.getElementById('reg-name').value.trim();
+      const roll = document.getElementById('reg-roll').value.trim();
+      const files = document.getElementById('reg-images').files;
+      const msg = document.getElementById('reg-msg');
 
-    async function registerStudent() {
-      const name = document.getElementById('name').value.trim();
-      const roll = document.getElementById('roll').value.trim();
-      const files = document.getElementById('images').files;
-      const status = document.getElementById('registerStatus');
       if (!name || !roll || files.length !== 10) {
-        status.innerText = '❌ Fill all fields and upload exactly 10 images.';
+        msg.textContent = '⚠️ Enter all fields and exactly 10 images.';
         return;
       }
 
-      const descriptors = [];
-      for (const file of files) {
-        const img = await faceapi.bufferToImage(file);
-        const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-        if (detection) {
-          descriptors.push(detection.descriptor);
-        }
+      const label = `${name}_${roll}`;
+      const readerPromises = [];
+
+      for (let file of files) {
+        const reader = new FileReader();
+        const promise = new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+        readerPromises.push(promise);
       }
 
-      if (descriptors.length === 10) {
-        localStorage.setItem(`${name}_${roll}`, JSON.stringify(descriptors));
-        status.innerText = `✅ Registered ${name}`;
-      } else {
-        status.innerText = '⚠️ Could not detect face in all images';
-      }
-    }
-
-    async function loadLabeledDescriptors() {
-      labeledDescriptors = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.includes("_")) {
-          const raw = JSON.parse(localStorage.getItem(key));
-          const desc = raw.map(d => new Float32Array(Object.values(d)));
-          labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(key, desc));
+      Promise.all(readerPromises).then(async (dataURLs) => {
+        const descriptors = [];
+        for (let dataURL of dataURLs) {
+          const img = await faceapi.fetchImage(dataURL);
+          const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+          if (detection) descriptors.push(detection.descriptor);
         }
-      }
+
+        if (descriptors.length) {
+          localStorage.setItem(label, JSON.stringify(descriptors));
+          msg.textContent = `✅ Registered ${name} (${roll})`;
+        } else {
+          msg.textContent = `❌ Could not detect face.`;
+        }
+      });
     }
 
     async function startAttendance() {
       const subject = document.getElementById('subject').value.trim();
-      if (!subject) return alert('Enter subject');
+      if (!subject) return alert("Enter subject name");
 
-      await loadLabeledDescriptors();
-      const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+      const labels = Object.keys(localStorage);
+      labeledDescriptors.length = 0;
+
+      for (let label of labels) {
+        const descriptorArray = JSON.parse(localStorage.getItem(label));
+        const float32Desc = descriptorArray.map(arr => new Float32Array(arr));
+        labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(label, float32Desc));
+      }
+
+      faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+      await faceapi.nets.ssdMobilenetv1.loadFromUri('./models');
+      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
+      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+
       const video = document.getElementById('video');
+      const overlay = document.getElementById('overlay');
+      const context = overlay.getContext('2d');
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
       video.srcObject = stream;
 
-      video.onplaying = () => {
-        const canvas = faceapi.createCanvasFromMedia(video);
-        document.body.append(canvas);
-        faceapi.matchDimensions(canvas, { width: 300, height: 225 });
-
-        const interval = setInterval(async () => {
-          const detections = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
-          const resized = faceapi.resizeResults(detections, { width: 300, height: 225 });
-          canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-
-          resized.forEach(detection => {
-            const best = faceMatcher.findBestMatch(detection.descriptor);
-            const box = detection.detection.box;
-            const drawBox = new faceapi.draw.DrawBox(box, { label: best.label });
-            drawBox.draw(canvas);
-
-            if (!best.label.includes("unknown")) {
-              logAttendance(best.label, subject);
-            }
-          });
-        }, 2000);
+      video.onloadedmetadata = () => {
+        video.play();
+        recognizeFaces(subject, context, video, overlay);
       }
     }
 
-    function logAttendance(label, subject) {
-      const [name, roll] = label.split("_");
-      const now = new Date().toLocaleString();
-      const row = `<tr><td>${name}</td><td>${roll}</td><td>${subject}</td><td>${now}</td></tr>`;
-      document.querySelector('#logTable tbody').innerHTML += row;
+    function recognizeFaces(subject, context, video, overlay) {
+      const marked = new Set();
+      const tbody = document.getElementById('log-body');
+      setInterval(async () => {
+        context.clearRect(0, 0, overlay.width, overlay.height);
+        const results = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
+        results.forEach(fd => {
+          const bestMatch = faceMatcher.findBestMatch(fd.descriptor);
+          const box = fd.detection.box;
+          context.strokeStyle = '#0f0';
+          context.strokeRect(box.x, box.y, box.width, box.height);
+
+          const now = new Date().toLocaleString();
+          const label = bestMatch.label;
+
+          if (label !== 'unknown' && !marked.has(label)) {
+            const [name, roll] = label.split('_');
+            const row = `<tr><td>${name}</td><td>${roll}</td><td>${subject}</td><td>${now}</td></tr>`;
+            tbody.innerHTML += row;
+            marked.add(label);
+          }
+
+          if (label === 'unknown') {
+            context.fillStyle = 'red';
+            context.fillText('Register First', box.x, box.y - 10);
+          } else {
+            context.fillStyle = 'green';
+            context.fillText(label, box.x, box.y - 10);
+          }
+        });
+      }, 1000);
     }
 
     function downloadCSV() {
       const rows = [['Name','Roll','Subject','Time']];
-      document.querySelectorAll('#logTable tbody tr').forEach(tr => {
-        const cols = Array.from(tr.children).map(td => td.textContent);
+      const trs = document.querySelectorAll('#log-body tr');
+      trs.forEach(tr => {
+        const cols = Array.from(tr.querySelectorAll('td')).map(td => td.textContent);
         rows.push(cols);
       });
-      const csvContent = rows.map(e => e.join(",")).join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv" });
+      let csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
       const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "attendance_log.csv";
+      link.setAttribute("href", csvContent);
+      link.setAttribute("download", "attendance.csv");
       link.click();
     }
-
-    loadModels();
   </script>
 </body>
 </html>
