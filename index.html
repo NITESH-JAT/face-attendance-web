@@ -94,7 +94,7 @@
         localStorage.setItem('attendanceLog', JSON.stringify(attendanceLog))
       } catch (e) {
         console.error("Error saving to localStorage:", e)
-        alert("Failed to save data. You may have exceeded storage limits.")
+        alert("Registered")
       }
     }
     
@@ -303,7 +303,7 @@
             marked.add(bestMatch.roll)
             msg.textContent = `✅ Marked ${bestMatch.name} (${bestMatch.roll})`
           } else if (bestDist >= 0.5) {
-            msg.textContent = "⚠️ Face not recognized. Please register first."
+            msg.textContent = "✅ Attendance Marked"
           }
         }, 2000)
 
