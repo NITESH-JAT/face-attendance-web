@@ -35,6 +35,9 @@
     <!-- Attendance Table -->
     <div class="mt-10 bg-white p-6 rounded-xl shadow-md">
       <h2 class="text-xl font-semibold mb-4">📝 Attendance Log</h2>
+      <div class="flex justify-end mb-4">
+        <button onclick="clearAttendance()" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Clear Attendance</button>
+      </div>
       <table class="table-auto w-full">
         <thead>
           <tr class="bg-blue-100">
@@ -47,24 +50,160 @@
         <tbody id="attendance_table"></tbody>
       </table>
     </div>
+    
+    <!-- Registered Students -->
+    <div class="mt-10 bg-white p-6 rounded-xl shadow-md">
+      <h2 class="text-xl font-semibold mb-4">👥 Registered Students</h2>
+      <div class="flex justify-end mb-4">
+        <button onclick="clearRegistration()" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Clear All</button>
+      </div>
+      <table class="table-auto w-full">
+        <thead>
+          <tr class="bg-blue-100">
+            <th class="px-4 py-2">Name</th>
+            <th class="px-4 py-2">Roll</th>
+            <th class="px-4 py-2">Images</th>
+          </tr>
+        </thead>
+        <tbody id="registered_students"></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
     let registeredFaces = []
+    let attendanceLog = []
+    
+    // Load data from localStorage on page load
+    window.onload = function() {
+      loadStoredData()
+      renderRegisteredStudents()
+      renderAttendanceLog()
+    }
+    
+    // Save data to localStorage
+    function saveData() {
+      try {
+        // We need to store only essential data (without image features which are large)
+        const storableStudents = registeredFaces.map(face => ({
+          name: face.name,
+          roll: face.roll,
+          features: face.features
+        }))
+        localStorage.setItem('registeredFaces', JSON.stringify(storableStudents))
+        localStorage.setItem('attendanceLog', JSON.stringify(attendanceLog))
+      } catch (e) {
+        console.error("Error saving to localStorage:", e)
+        alert("Failed to save data. You may have exceeded storage limits.")
+      }
+    }
+    
+    // Load data from localStorage
+    function loadStoredData() {
+      try {
+        const storedFaces = localStorage.getItem('registeredFaces')
+        const storedAttendance = localStorage.getItem('attendanceLog')
+        
+        if (storedFaces) {
+          registeredFaces = JSON.parse(storedFaces)
+        }
+        if (storedAttendance) {
+          attendanceLog = JSON.parse(storedAttendance)
+        }
+      } catch (e) {
+        console.error("Error loading from localStorage:", e)
+      }
+    }
+    
+    // Render the registered students table
+    function renderRegisteredStudents() {
+      const tableBody = document.getElementById("registered_students")
+      tableBody.innerHTML = ""
+      
+      const uniqueStudents = {}
+      registeredFaces.forEach(face => {
+        if (!uniqueStudents[face.roll]) {
+          uniqueStudents[face.roll] = {
+            name: face.name,
+            roll: face.roll,
+            count: 1
+          }
+        } else {
+          uniqueStudents[face.roll].count++
+        }
+      })
+      
+      Object.values(uniqueStudents).forEach(student => {
+        const row = document.createElement("tr")
+        row.innerHTML = `
+          <td class='border px-4 py-2'>${student.name}</td>
+          <td class='border px-4 py-2'>${student.roll}</td>
+          <td class='border px-4 py-2'>${student.count}</td>`
+        tableBody.appendChild(row)
+      })
+    }
+    
+    // Render the attendance log table
+    function renderAttendanceLog() {
+      const tableBody = document.getElementById("attendance_table")
+      tableBody.innerHTML = ""
+      
+      attendanceLog.forEach(entry => {
+        const row = document.createElement("tr")
+        row.innerHTML = `
+          <td class='border px-4 py-2'>${entry.name}</td>
+          <td class='border px-4 py-2'>${entry.roll}</td>
+          <td class='border px-4 py-2'>${entry.subject}</td>
+          <td class='border px-4 py-2'>${entry.time}</td>`
+        tableBody.appendChild(row)
+      })
+    }
+    
+    // Clear registration data
+    function clearRegistration() {
+      if (confirm("Are you sure you want to clear all registered students?")) {
+        registeredFaces = []
+        saveData()
+        renderRegisteredStudents()
+        document.getElementById("register_msg").textContent = "✅ All registrations cleared"
+      }
+    }
+    
+    // Clear attendance data
+    function clearAttendance() {
+      if (confirm("Are you sure you want to clear the attendance log?")) {
+        attendanceLog = []
+        saveData()
+        renderAttendanceLog()
+        document.getElementById("attendance_msg").textContent = "✅ Attendance log cleared"
+      }
+    }
 
     function registerStudent() {
       const name = document.getElementById("reg_name").value.trim()
       const roll = document.getElementById("reg_roll").value.trim()
       const files = document.getElementById("reg_images").files
       const msg = document.getElementById("register_msg")
-      if (!name || !roll || files.length !== 10) {
-        msg.textContent = "⚠️ Enter name, roll and upload 10 images."
+      
+      if (!name || !roll) {
+        msg.textContent = "⚠️ Enter name and roll number."
         return
       }
-
+      
+      if (files.length < 1) {
+        msg.textContent = "⚠️ Please upload at least one image."
+        return
+      }
+      
+      msg.textContent = "🔄 Processing images..."
+      
       const reader = new FileReader()
       let loaded = 0
-      for (let i = 0; i < files.length; i++) {
+      const totalFiles = Math.min(files.length, 10) // Limit to 10 images max
+      
+      const processNextImage = (index) => {
+        if (index >= totalFiles) return
+        
         reader.onload = function (e) {
           const img = new Image()
           img.onload = function () {
@@ -75,29 +214,51 @@
             ctx.drawImage(img, 0, 0, 100, 100)
             const imageData = ctx.getImageData(0, 0, 100, 100)
             const flatData = Array.from(imageData.data).map(x => x / 255)
+            
             registeredFaces.push({ name, roll, features: flatData })
             loaded++
-            if (loaded === 10) msg.textContent = `✅ Registered ${name} (${roll})`
+            
+            if (loaded === totalFiles) {
+              saveData()
+              renderRegisteredStudents()
+              msg.textContent = `✅ Registered ${name} (${roll}) with ${loaded} images`
+              document.getElementById("reg_name").value = ""
+              document.getElementById("reg_roll").value = ""
+              document.getElementById("reg_images").value = ""
+            } else {
+              processNextImage(index + 1)
+            }
           }
           img.src = e.target.result
         }
-        reader.readAsDataURL(files[i])
+        reader.readAsDataURL(files[index])
       }
+      
+      processNextImage(0)
     }
 
     function startAttendance() {
       const subject = document.getElementById("subject_input").value.trim()
       const msg = document.getElementById("attendance_msg")
       const video = document.getElementById("video")
+      
       if (!subject) {
         msg.textContent = "⚠️ Enter subject."
         return
       }
-      if (!navigator.mediaDevices) {
-        msg.textContent = "⚠️ Webcam not supported."
+      
+      if (registeredFaces.length === 0) {
+        msg.textContent = "⚠️ No students registered. Please register students first."
         return
       }
-      msg.textContent = "🔍 Recognizing... Press stop to end."
+      
+      if (!navigator.mediaDevices) {
+        msg.textContent = "⚠️ Webcam not supported on this browser."
+        return
+      }
+      
+      msg.textContent = "🔍 Recognizing... Will run for 20 seconds."
+      
       navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
         video.srcObject = stream
         const canvas = document.createElement("canvas")
@@ -105,10 +266,15 @@
         const marked = new Set()
 
         const interval = setInterval(() => {
+          if (video.videoWidth === 0) return // Skip if video not ready
+          
           canvas.width = video.videoWidth
           canvas.height = video.videoHeight
           ctx.drawImage(video, 0, 0)
-          const faceImgData = ctx.getImageData(0, 0, 100, 100) // mock small
+          
+          // In a real application, you would use face detection here
+          // For now, we'll just use a portion of the video
+          const faceImgData = ctx.getImageData(0, 0, 100, 100) 
           const currentData = Array.from(faceImgData.data).map(x => x / 255)
 
           let bestMatch = null
@@ -123,13 +289,17 @@
           }
 
           if (bestDist < 0.5 && bestMatch && !marked.has(bestMatch.roll)) {
-            const row = document.createElement("tr")
-            row.innerHTML = `
-              <td class='border px-4 py-2'>${bestMatch.name}</td>
-              <td class='border px-4 py-2'>${bestMatch.roll}</td>
-              <td class='border px-4 py-2'>${subject}</td>
-              <td class='border px-4 py-2'>${new Date().toLocaleString()}</td>`
-            document.getElementById("attendance_table").appendChild(row)
+            const timestamp = new Date().toLocaleString()
+            attendanceLog.push({
+              name: bestMatch.name,
+              roll: bestMatch.roll,
+              subject: subject,
+              time: timestamp
+            })
+            
+            saveData()
+            renderAttendanceLog()
+            
             marked.add(bestMatch.roll)
             msg.textContent = `✅ Marked ${bestMatch.name} (${bestMatch.roll})`
           } else if (bestDist >= 0.5) {
@@ -140,14 +310,17 @@
         setTimeout(() => {
           clearInterval(interval)
           stream.getTracks().forEach(track => track.stop())
-          msg.textContent = "✔️ Attendance ended."
+          msg.textContent = "✔️ Attendance session ended."
         }, 20000) // runs for 20 seconds
+      }).catch(err => {
+        msg.textContent = "⚠️ Camera error: " + err.message
       })
     }
 
     function euclideanDistance(a, b) {
       let sum = 0
-      for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2
+      const length = Math.min(a.length, b.length)
+      for (let i = 0; i < length; i++) sum += (a[i] - b[i]) ** 2
       return Math.sqrt(sum)
     }
   </script>
