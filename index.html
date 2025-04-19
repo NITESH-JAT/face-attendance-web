@@ -3,223 +3,152 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Face Recognition Attendance</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #f0f2f5;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      padding-top: 30px;
-    }
-    .container {
-      display: flex;
-      gap: 40px;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.1);
-    }
-    .section {
-      flex: 1;
-    }
-    h2 {
-      color: #007bff;
-    }
-    input, select, button, textarea {
-      width: 100%;
-      padding: 10px;
-      margin-top: 8px;
-      margin-bottom: 15px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-    button {
-      background-color: #007bff;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-    #log-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-    }
-    #log-table th, #log-table td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-    }
-    #log-table th {
-      background: #007bff;
-      color: white;
-    }
-    canvas, video {
-      display: block;
-      margin: 10px auto;
-    }
-  </style>
+  <title>Face Attendance System</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
+  <script async src="https://docs.opencv.org/master/opencv.js" type="text/javascript"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
-  <div class="container">
-    <div class="section">
-      <h2>Register Student</h2>
-      <input type="text" id="reg-name" placeholder="Full Name" />
-      <input type="text" id="reg-roll" placeholder="Roll Number" />
-      <input type="file" id="reg-images" accept="image/*" multiple />
-      <button onclick="registerStudent()">Register</button>
-      <p id="reg-msg"></p>
+<body class="bg-gray-100 font-sans">
+  <div class="container mx-auto py-10 px-5">
+    <h1 class="text-3xl font-bold text-center text-blue-600 mb-10">Face Recognition Attendance</h1>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+      <!-- Register -->
+      <div class="bg-white p-6 rounded-xl shadow-md">
+        <h2 class="text-xl font-semibold mb-4">📋 Register</h2>
+        <input type="text" id="reg_name" placeholder="Name" class="w-full mb-3 p-2 border rounded-md" />
+        <input type="text" id="reg_roll" placeholder="Roll No" class="w-full mb-3 p-2 border rounded-md" />
+        <input type="file" id="reg_images" multiple accept="image/*" class="w-full mb-3 p-2 border rounded-md" />
+        <button onclick="registerStudent()" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">Register</button>
+        <p id="register_msg" class="mt-3 text-green-600"></p>
+      </div>
+
+      <!-- Attendance -->
+      <div class="bg-white p-6 rounded-xl shadow-md">
+        <h2 class="text-xl font-semibold mb-4">📷 Take Attendance</h2>
+        <input type="text" id="subject_input" placeholder="Subject" class="w-full mb-3 p-2 border rounded-md" />
+        <button onclick="startAttendance()" class="w-full bg-green-600 text-white py-2 rounded-md hover:bg-green-700">Start Attendance</button>
+        <video id="video" autoplay class="mt-4 w-full h-60 object-cover rounded-md border"></video>
+        <p id="attendance_msg" class="mt-3 text-blue-600"></p>
+      </div>
     </div>
 
-    <div class="section">
-      <h2>Take Attendance</h2>
-      <input type="text" id="subject" placeholder="Subject" />
-      <button onclick="startAttendance()">Take Attendance</button>
-      <video id="video" width="320" height="240" autoplay muted></video>
-      <canvas id="overlay" width="320" height="240"></canvas>
-      <h3>Attendance Log</h3>
-      <table id="log-table">
+    <!-- Attendance Table -->
+    <div class="mt-10 bg-white p-6 rounded-xl shadow-md">
+      <h2 class="text-xl font-semibold mb-4">📝 Attendance Log</h2>
+      <table class="table-auto w-full">
         <thead>
-          <tr>
-            <th>Name</th>
-            <th>Roll</th>
-            <th>Subject</th>
-            <th>Time</th>
+          <tr class="bg-blue-100">
+            <th class="px-4 py-2">Name</th>
+            <th class="px-4 py-2">Roll</th>
+            <th class="px-4 py-2">Subject</th>
+            <th class="px-4 py-2">Time</th>
           </tr>
         </thead>
-        <tbody id="log-body"></tbody>
+        <tbody id="attendance_table"></tbody>
       </table>
-      <button onclick="downloadCSV()">Download CSV</button>
     </div>
   </div>
 
   <script>
-    const labeledDescriptors = []
-    let faceMatcher;
+    let registeredFaces = []
 
     function registerStudent() {
-      const name = document.getElementById('reg-name').value.trim();
-      const roll = document.getElementById('reg-roll').value.trim();
-      const files = document.getElementById('reg-images').files;
-      const msg = document.getElementById('reg-msg');
-
+      const name = document.getElementById("reg_name").value.trim()
+      const roll = document.getElementById("reg_roll").value.trim()
+      const files = document.getElementById("reg_images").files
+      const msg = document.getElementById("register_msg")
       if (!name || !roll || files.length !== 10) {
-        msg.textContent = '⚠️ Enter all fields and exactly 10 images.';
-        return;
+        msg.textContent = "⚠️ Enter name, roll and upload 10 images."
+        return
       }
 
-      const label = `${name}_${roll}`;
-      const readerPromises = [];
-
-      for (let file of files) {
-        const reader = new FileReader();
-        const promise = new Promise((resolve) => {
-          reader.onload = () => resolve(reader.result);
-          reader.readAsDataURL(file);
-        });
-        readerPromises.push(promise);
-      }
-
-      Promise.all(readerPromises).then(async (dataURLs) => {
-        const descriptors = [];
-        for (let dataURL of dataURLs) {
-          const img = await faceapi.fetchImage(dataURL);
-          const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-          if (detection) descriptors.push(detection.descriptor);
+      const reader = new FileReader()
+      let loaded = 0
+      for (let i = 0; i < files.length; i++) {
+        reader.onload = function (e) {
+          const img = new Image()
+          img.onload = function () {
+            const canvas = document.createElement("canvas")
+            canvas.width = 100
+            canvas.height = 100
+            const ctx = canvas.getContext("2d")
+            ctx.drawImage(img, 0, 0, 100, 100)
+            const imageData = ctx.getImageData(0, 0, 100, 100)
+            const flatData = Array.from(imageData.data).map(x => x / 255)
+            registeredFaces.push({ name, roll, features: flatData })
+            loaded++
+            if (loaded === 10) msg.textContent = `✅ Registered ${name} (${roll})`
+          }
+          img.src = e.target.result
         }
-
-        if (descriptors.length) {
-          localStorage.setItem(label, JSON.stringify(descriptors));
-          msg.textContent = `✅ Registered ${name} (${roll})`;
-        } else {
-          msg.textContent = `❌ Could not detect face.`;
-        }
-      });
-    }
-
-    async function startAttendance() {
-      const subject = document.getElementById('subject').value.trim();
-      if (!subject) return alert("Enter subject name");
-
-      const labels = Object.keys(localStorage);
-      labeledDescriptors.length = 0;
-
-      for (let label of labels) {
-        const descriptorArray = JSON.parse(localStorage.getItem(label));
-        const float32Desc = descriptorArray.map(arr => new Float32Array(arr));
-        labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(label, float32Desc));
-      }
-
-      faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
-      await faceapi.nets.ssdMobilenetv1.loadFromUri('./models');
-      await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-      await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
-
-      const video = document.getElementById('video');
-      const overlay = document.getElementById('overlay');
-      const context = overlay.getContext('2d');
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
-      video.srcObject = stream;
-
-      video.onloadedmetadata = () => {
-        video.play();
-        recognizeFaces(subject, context, video, overlay);
+        reader.readAsDataURL(files[i])
       }
     }
 
-    function recognizeFaces(subject, context, video, overlay) {
-      const marked = new Set();
-      const tbody = document.getElementById('log-body');
-      setInterval(async () => {
-        context.clearRect(0, 0, overlay.width, overlay.height);
-        const results = await faceapi.detectAllFaces(video).withFaceLandmarks().withFaceDescriptors();
-        results.forEach(fd => {
-          const bestMatch = faceMatcher.findBestMatch(fd.descriptor);
-          const box = fd.detection.box;
-          context.strokeStyle = '#0f0';
-          context.strokeRect(box.x, box.y, box.width, box.height);
+    function startAttendance() {
+      const subject = document.getElementById("subject_input").value.trim()
+      const msg = document.getElementById("attendance_msg")
+      const video = document.getElementById("video")
+      if (!subject) {
+        msg.textContent = "⚠️ Enter subject."
+        return
+      }
+      if (!navigator.mediaDevices) {
+        msg.textContent = "⚠️ Webcam not supported."
+        return
+      }
+      msg.textContent = "🔍 Recognizing... Press stop to end."
+      navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+        video.srcObject = stream
+        const canvas = document.createElement("canvas")
+        const ctx = canvas.getContext("2d")
+        const marked = new Set()
 
-          const now = new Date().toLocaleString();
-          const label = bestMatch.label;
+        const interval = setInterval(() => {
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+          ctx.drawImage(video, 0, 0)
+          const faceImgData = ctx.getImageData(0, 0, 100, 100) // mock small
+          const currentData = Array.from(faceImgData.data).map(x => x / 255)
 
-          if (label !== 'unknown' && !marked.has(label)) {
-            const [name, roll] = label.split('_');
-            const row = `<tr><td>${name}</td><td>${roll}</td><td>${subject}</td><td>${now}</td></tr>`;
-            tbody.innerHTML += row;
-            marked.add(label);
+          let bestMatch = null
+          let bestDist = Infinity
+
+          for (const person of registeredFaces) {
+            const dist = euclideanDistance(currentData, person.features)
+            if (dist < bestDist) {
+              bestDist = dist
+              bestMatch = person
+            }
           }
 
-          if (label === 'unknown') {
-            context.fillStyle = 'red';
-            context.fillText('Register First', box.x, box.y - 10);
-          } else {
-            context.fillStyle = 'green';
-            context.fillText(label, box.x, box.y - 10);
+          if (bestDist < 0.5 && bestMatch && !marked.has(bestMatch.roll)) {
+            const row = document.createElement("tr")
+            row.innerHTML = `
+              <td class='border px-4 py-2'>${bestMatch.name}</td>
+              <td class='border px-4 py-2'>${bestMatch.roll}</td>
+              <td class='border px-4 py-2'>${subject}</td>
+              <td class='border px-4 py-2'>${new Date().toLocaleString()}</td>`
+            document.getElementById("attendance_table").appendChild(row)
+            marked.add(bestMatch.roll)
+            msg.textContent = `✅ Marked ${bestMatch.name} (${bestMatch.roll})`
+          } else if (bestDist >= 0.5) {
+            msg.textContent = "⚠️ Face not recognized. Please register first."
           }
-        });
-      }, 1000);
+        }, 2000)
+
+        setTimeout(() => {
+          clearInterval(interval)
+          stream.getTracks().forEach(track => track.stop())
+          msg.textContent = "✔️ Attendance ended."
+        }, 20000) // runs for 20 seconds
+      })
     }
 
-    function downloadCSV() {
-      const rows = [['Name','Roll','Subject','Time']];
-      const trs = document.querySelectorAll('#log-body tr');
-      trs.forEach(tr => {
-        const cols = Array.from(tr.querySelectorAll('td')).map(td => td.textContent);
-        rows.push(cols);
-      });
-      let csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
-      const link = document.createElement("a");
-      link.setAttribute("href", csvContent);
-      link.setAttribute("download", "attendance.csv");
-      link.click();
+    function euclideanDistance(a, b) {
+      let sum = 0
+      for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2
+      return Math.sqrt(sum)
     }
   </script>
 </body>
